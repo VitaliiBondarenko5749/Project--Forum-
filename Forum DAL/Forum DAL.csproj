@@ -14,9 +14,4 @@
     <PackageReference Include="System.Data.SqlClient" Version="4.8.5" />
   </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\..\Project -Authorization-\Authorization DAL\Authorization DAL.csproj" />
-    <ProjectReference Include="..\..\Project -Catalog of games-\Catalog of Games DAL\Catalog of Games DAL.csproj" />
-  </ItemGroup>
-
 </Project>
