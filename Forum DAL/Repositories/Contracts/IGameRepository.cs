@@ -9,6 +9,10 @@ namespace Forum_DAL.Repositories.Contracts
 {
     public interface IGameRepository : IGenericRepository<Game> 
     {
-        Task<IEnumerable<Game>> GetGamesForPostAsync(int gameId);
+        // Отримання ігор для постів
+        Task<IEnumerable<Game>> GetGamesForPostAsync(int postId);
+
+        // Знайти гру за іменем
+        Task<int> GetGameByNameAsync(string gameName);
     }
 }

@@ -1,10 +1,11 @@
-﻿using Forum_DAL.Models;
+﻿using Catalog_of_Games_DAL.Entities;
+using Forum_DAL.Models;
 using Forum_DAL.Repositories.Contracts;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Forum_API.Controllers
 {
-    [Route("api/[controller]")]
+    [Route("api/posts")]
     [ApiController]
     public class ReplyController : ControllerBase
     {
@@ -17,8 +18,9 @@ namespace Forum_API.Controllers
             this.unitOfWork = unitOfWork;
         }
 
-        [HttpPost]
-        public async Task<ActionResult> PostReplyAsync([FromBody] Reply reply)
+        // Додавання коментаря до поста
+        [HttpPost("{postId}/comments")]
+        public async Task<ActionResult> PostCommentAsync(int postId, [FromBody] Reply reply)
         {
             try
             {
@@ -36,88 +38,197 @@ namespace Forum_API.Controllers
                     return BadRequest("Incorrect object \"Reply\" type!");
                 }
 
-                int createdId = await unitOfWork.ReplyRepository.AddAsync(reply);
+                Post post = await unitOfWork.PostRepository.GetAsync(postId);
 
-                unitOfWork.Commit();
-
-                return StatusCode(StatusCodes.Status201Created);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError($"Transaction fail! Something went wrong in \"PostPostAsync(...)\" method. Error type:" +
-                    $" {ex.Message}");
-
-                return StatusCode(StatusCodes.Status500InternalServerError, "error");
-            }
-        }
-
-        [HttpPut("{id}")]
-        public async Task<ActionResult> UpdateReplyAsync(int id, [FromBody] Reply reply)
-        {
-            try
-            {
-                if (reply == null)
+                if (post == null)
                 {
                     logger.LogInformation("Empty client-side json!");
 
-                    return BadRequest("Object \"Reply\" type is null.");
+                    return BadRequest("Object \"Post\" type is null.");
                 }
 
-                if (!ModelState.IsValid)
-                {
-                    logger.LogInformation("Incorrect client-side json!");
+                int replyId = await unitOfWork.ReplyRepository.AddAsync(reply);
 
-                    return BadRequest("Incorrect object \"Reply\" type!");
-                }
-
-                Reply replyEntity = await unitOfWork.ReplyRepository.GetAsync(id);
-
-                if (replyEntity == null)
-                {
-                    logger.LogInformation($"Reply with id: {id}, was not found in the database!");
-
-                    return NotFound();
-                }
-
-                await unitOfWork.ReplyRepository.ReplaceAsync(reply);
+                await unitOfWork.ReplyRepository.PutPostAndGameAsync(postId, replyId);
 
                 unitOfWork.Commit();
 
-                return StatusCode(StatusCodes.Status204NoContent);
+                return Ok(reply);
             }
             catch (Exception ex)
             {
-                logger.LogError($"Transaction fail! Something went wrong in \"UpdatePostAsync(...)\" method. Error type:" +
+                logger.LogError($"Transaction fail! Something went wrong in \"PostCommentAsync(...)\" method. Error type:" +
                     $" {ex.Message}");
 
                 return StatusCode(StatusCodes.Status500InternalServerError, "error");
             }
         }
 
-        [HttpDelete("{id}")]
-        public async Task<ActionResult> DeleteByIdAsync(int id)
+        // Видалення коментаря
+        [HttpDelete("{postId}/comments/{commentId}")]
+        public async Task<ActionResult> DeleteCommentAsync(int postId, int commentId)
         {
             try
             {
-                Reply postEntity = await unitOfWork.ReplyRepository.GetAsync(id);
+                // Отримуємо сутність поста, щоб перевірити, чи існує взагалі відповідь з таким Id
+                Post post = await unitOfWork.PostRepository.GetAsync(postId);
 
-                if (postEntity == null)
+                if (post == null)
                 {
-                    logger.LogInformation($"Reply with id: {id}, was not found in the database!");
+                    logger.LogInformation($"Post with id: {postId}, was not found in the database!");
 
                     return NotFound();
                 }
 
-                await unitOfWork.ReplyRepository.DeleteAsync(id);
+                // Отримуємо сутність відповіді, щоб перевірити, чи існує взагалі відповідь з таким Id
+                Reply reply = await unitOfWork.ReplyRepository.GetAsync(commentId);
+
+                if (reply == null)
+                {
+                    logger.LogInformation($"Reply with id: {commentId}, was not found in the database!");
+
+                    return NotFound();
+                }
+
+                // Отримання значення ReplyId з таблиці PostsReplies, для того щоб перевірити коментар та пост на зв'язаність
+                commentId = await unitOfWork.ReplyRepository.GetReplyIdAsync(post.Id, reply.Id);
+
+                // Видалення записів з таблиці PostsReplies, ReplyId яких еквівалентно з параметром
+                await unitOfWork.ReplyRepository.DeleteReplyFromPostAsync(reply.Id);
+
+                // Видалення записів(лайків) з таблиці LikedReplies, ReplyId який еквівалентно зі значеннями колекції repliesId
+                await unitOfWork.ReplyRepository.DeleteAllLikesFromReplyAsync(reply.Id);
+
+                // Отриманння RepliesToReplyId з таблиці RepliesToReply_Reply, які зв'язані з основною відповіддю
+                ICollection<int>? repliesToReplyId = (List<int>)await unitOfWork.ReplyRepository.GetRepliesToReplyIdAsync(reply.Id);
+
+                // Видалення записів з таблиці RepliesToReply_Reply, ReplyId яких пов'язані з параметром
+                await unitOfWork.ReplyRepository.DeleteRepliesToReplyAsync(reply.Id);
+
+                foreach (int replyToReplyId in repliesToReplyId)
+                {
+                    // Видалення записів з таблиці LikedRepliesToReply, ReplyToReplyId який еквівалентно зі значеннями з колекції
+                    await unitOfWork.ReplyToReplyRepository.DeleteLikedRepliesToReply(replyToReplyId);
+
+                    // Видаляємо відповіді на відповіді
+                    await unitOfWork.ReplyToReplyRepository.DeleteAsync(replyToReplyId);
+                }
+
+                // Видалення відповіді на пост
+                await unitOfWork.ReplyRepository.DeleteAsync(reply.Id);
 
                 unitOfWork.Commit();
 
-                return NoContent();
+                return Ok();
             }
             catch (Exception ex)
             {
-                logger.LogError($"Transaction fail! Something went wrong in \"DeleteByIdAsync(...)\" method. Error type:" +
+                logger.LogError($"Transaction fail! Something went wrong in \"DeleteCommentAsync(...)\" method. Error type:" +
                    $" {ex.Message}");
+
+                return StatusCode(StatusCodes.Status500InternalServerError, "error");
+            }
+        }
+
+        // Додання лайку до коментаря
+        [HttpPost("{postId}/comments/{commentId}/like")]
+        public async Task<ActionResult> AddLikeToCommentAsync(int postId, int commentId, int userId)
+        {
+            try
+            {
+                // Перевіряємо чи існує пост з Id
+                Post post = await unitOfWork.PostRepository.GetAsync(postId);
+
+                if(post == null)
+                {
+                    return BadRequest("Object \"Post\" type is null.");
+                }
+                
+                // Перевіряємо, чи існує такий коментар
+                Reply reply = await unitOfWork.ReplyRepository.GetAsync(commentId);
+
+                if (post == null)
+                {
+                    return BadRequest("Object \"Reply\" type is null.");
+                }
+
+                // Отримання значення ReplyId з таблиці PostsReplies, для того щоб перевірити коментар та пост на зв'язаність
+                commentId = await unitOfWork.ReplyRepository.GetReplyIdAsync(post.Id, reply.Id);
+
+                int newUserId = 0;
+
+                // Перевіримо, чи поставив вже користувач лайк
+                try
+                {
+                    newUserId = await unitOfWork.ReplyRepository.GetUserIdFromLikedRepliesAsync(userId, commentId);
+                }
+                catch
+                {
+                    newUserId = 0;
+                }
+
+                if (newUserId != 0)
+                {
+                    logger.LogInformation($"User with id:{userId} has already liked it.");
+
+                    return BadRequest($"User with id:{userId} has already liked it.");
+                }
+
+                await unitOfWork.ReplyRepository.PostNewLikeForReplyAsync(commentId, userId);
+
+                unitOfWork.Commit();
+
+                return Ok();
+            }
+            catch (Exception ex)
+            {
+                logger.LogError($"Transaction fail! Something went wrong in \"AddLikeToCommentAsync(...)\" method. Error type:" +
+                    $" {ex.Message}");
+
+                return StatusCode(StatusCodes.Status500InternalServerError, "error");
+            }
+        }
+
+        // Видалення лайку з коментаря
+        [HttpDelete("{postId}/comments/{commentId}/like")]
+        public async Task<ActionResult> DeleteLikeFromCommentAsync(int postId, int commentId, int userId)
+        {
+            try
+            {
+                // Отримуємо сутність поста, щоб перевірити, чи існує взагалі відповідь з таким Id
+                Post post = await unitOfWork.PostRepository.GetAsync(postId);
+
+                if (post == null)
+                {
+                    logger.LogInformation($"Post with id: {postId}, was not found in the database!");
+
+                    return NotFound();
+                }
+
+                // Отримуємо сутність відповіді, щоб перевірити, чи існує взагалі відповідь з таким Id
+                Reply reply = await unitOfWork.ReplyRepository.GetAsync(commentId);
+
+                if (reply == null)
+                {
+                    logger.LogInformation($"Reply with id: {commentId}, was not found in the database!");
+
+                    return NotFound();
+                }
+
+                // Отримання значення ReplyId з таблиці PostsReplies, для того щоб перевірити коментар та пост на зв'язаність
+                commentId = await unitOfWork.ReplyRepository.GetReplyIdAsync(post.Id, reply.Id);
+
+                // Видалення запису з таблиці LikedReplies, щоб забрати лайк
+                await unitOfWork.ReplyRepository.DeleteLikeFromReplyAsync(commentId, userId);
+
+                unitOfWork.Commit();
+
+                return Ok();
+            }
+            catch(Exception ex)
+            {
+                logger.LogError($"Transaction fail! Something went wrong in \"DeleteLikeFromCommentAsync(...)\" method. Error type:" +
+                    $" {ex.Message}");
 
                 return StatusCode(StatusCodes.Status500InternalServerError, "error");
             }
