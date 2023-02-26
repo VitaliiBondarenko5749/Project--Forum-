@@ -8,7 +8,8 @@ namespace Forum_DAL.Repositories
         private readonly IDbTransaction transaction;
 
         public UnitOfWork(IPostRepository postRepository, IReplyRepository replyRepository,
-            IReplyToReplyRepository replyToRepliesRepository, IGameRepository gameRepository, IDbTransaction transaction)
+            IReplyToReplyRepository replyToRepliesRepository, IGameRepository gameRepository,
+            IDbTransaction transaction)
         {
             PostRepository = postRepository;
             ReplyRepository = replyRepository;

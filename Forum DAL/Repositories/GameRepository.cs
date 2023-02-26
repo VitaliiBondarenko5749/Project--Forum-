@@ -1,14 +1,8 @@
 ﻿using Catalog_of_Games_DAL.Entities;
 using Dapper;
 using Forum_DAL.Repositories.Contracts;
-using System;
-using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlClient;
-using System.Linq;
-using System.Reflection.Metadata.Ecma335;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Forum_DAL.Repositories
 {
@@ -17,10 +11,26 @@ namespace Forum_DAL.Repositories
         public GameRepository(SqlConnection sqlConnection, IDbTransaction dbTransaction)
             : base(sqlConnection, dbTransaction, "gamecatalog.Games") { }
 
-        public async Task<IEnumerable<Game>> GetGamesForPostAsync(int gameId)
+        // Отримання ігор для постів
+        public async Task<IEnumerable<Game>> GetGamesForPostAsync(int postId)
         {
+            string sqlQuery = "SELECT * FROM gamecatalog.Games" +
+                " INNER JOIN forum.PostsGames ON gamecatalog.Games.Id = forum.PostsGames.GameId" +
+                " WHERE forum.PostsGames.PostId = @PostId;";
 
-            return null;
+            IEnumerable<Game> games = await sqlConnection.QueryAsync<Game>(sqlQuery, param: new { PostId = postId },
+                transaction: dbTransaction);
+
+            return games;
+        }
+
+        // Знайти гру за іменем
+        public async Task<int> GetGameByNameAsync(string gameName)
+        {
+            string sqlQuery = "SELECT TOP 1 Id FROM gamecatalog.Games WHERE GmName = @GmName;";
+
+            return await sqlConnection.QueryFirstAsync<int>(sqlQuery, param: new {GmName = gameName},
+                transaction: dbTransaction);
         }
     }
 }

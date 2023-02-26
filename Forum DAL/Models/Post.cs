@@ -7,18 +7,18 @@ namespace Forum_DAL.Models
     public class Post
     {
         public int Id { get; set; }
-        public string Title { get; set; }
-        public string Content { get; set; }
+        public string? Title { get; set; }
+        public string? Content { get; set; }
         public DateTime CreatedAt { get; set; }
         public int CreatedBy { get; set; }
 
         [Ignore]
-        public List<Game> Games { get; set; } = new List<Game>();
+        public ICollection<Game>? Games { get; set; }
 
         [Ignore]
-        public User User { get; set; }
+        public User? User { get; set; }
 
         [Ignore]
-        public List<Reply> Replies { get; set; } = new List<Reply>();
+        public ICollection<Reply>? Replies { get; set; }
     }
 }
