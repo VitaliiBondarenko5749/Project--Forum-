@@ -47,10 +47,14 @@ namespace Forum_API.Controllers
                     return BadRequest("Object \"Post\" type is null.");
                 }
 
-                int replyId = await unitOfWork.ReplyRepository.AddAsync(reply);
-
-                await unitOfWork.ReplyRepository.PutPostAndGameAsync(postId, replyId);
-
+                PostReply postReply = new PostReply()
+                {
+                    PostId = post.Id,
+                    ReplyId = await unitOfWork.ReplyRepository.AddAsync(reply)
+                };
+            
+                await unitOfWork.PostReplyRepository.AddAsync(postReply);
+                
                 unitOfWork.Commit();
 
                 return Ok(reply);
@@ -91,24 +95,24 @@ namespace Forum_API.Controllers
                 }
 
                 // Отримання значення ReplyId з таблиці PostsReplies, для того щоб перевірити коментар та пост на зв'язаність
-                commentId = await unitOfWork.ReplyRepository.GetReplyIdAsync(post.Id, reply.Id);
+                commentId = await unitOfWork.PostReplyRepository.GetReplyIdAsync(post.Id, reply.Id);
 
                 // Видалення записів з таблиці PostsReplies, ReplyId яких еквівалентно з параметром
-                await unitOfWork.ReplyRepository.DeleteReplyFromPostAsync(reply.Id);
+                await unitOfWork.PostReplyRepository.DeleteReplyFromPostAsync(reply.Id);
 
                 // Видалення записів(лайків) з таблиці LikedReplies, ReplyId який еквівалентно зі значеннями колекції repliesId
-                await unitOfWork.ReplyRepository.DeleteAllLikesFromReplyAsync(reply.Id);
+                await unitOfWork.LikedReplyRepository.DeleteAllLikesFromReplyAsync(reply.Id);
 
                 // Отриманння RepliesToReplyId з таблиці RepliesToReply_Reply, які зв'язані з основною відповіддю
-                ICollection<int>? repliesToReplyId = (List<int>)await unitOfWork.ReplyRepository.GetRepliesToReplyIdAsync(reply.Id);
+                ICollection<int>? repliesToReplyId = (List<int>)await unitOfWork.ReplyToReply_ReplyRepository.GetRepliesToReplyIdAsync(reply.Id);
 
                 // Видалення записів з таблиці RepliesToReply_Reply, ReplyId яких пов'язані з параметром
-                await unitOfWork.ReplyRepository.DeleteRepliesToReplyAsync(reply.Id);
+                await unitOfWork.ReplyToReply_ReplyRepository.DeleteRepliesToReplyAsync(reply.Id);
 
                 foreach (int replyToReplyId in repliesToReplyId)
                 {
                     // Видалення записів з таблиці LikedRepliesToReply, ReplyToReplyId який еквівалентно зі значеннями з колекції
-                    await unitOfWork.ReplyToReplyRepository.DeleteLikedRepliesToReply(replyToReplyId);
+                    await unitOfWork.LikedReplyToReplyRepository.DeleteLikedRepliesToReply(replyToReplyId);
 
                     // Видаляємо відповіді на відповіді
                     await unitOfWork.ReplyToReplyRepository.DeleteAsync(replyToReplyId);
@@ -152,29 +156,30 @@ namespace Forum_API.Controllers
                     return BadRequest("Object \"Reply\" type is null.");
                 }
 
-                // Отримання значення ReplyId з таблиці PostsReplies, для того щоб перевірити коментар та пост на зв'язаність
-                commentId = await unitOfWork.ReplyRepository.GetReplyIdAsync(post.Id, reply.Id);
-
-                int newUserId = 0;
+                LikedReply likedReply = new LikedReply()
+                {
+                    // Отримання значення ReplyId з таблиці PostsReplies, для того щоб перевірити коментар та пост на зв'язаність
+                    ReplyId = await unitOfWork.PostReplyRepository.GetReplyIdAsync(post.Id, reply.Id)
+                };
 
                 // Перевіримо, чи поставив вже користувач лайк
                 try
                 {
-                    newUserId = await unitOfWork.ReplyRepository.GetUserIdFromLikedRepliesAsync(userId, commentId);
+                    likedReply.UserId = await unitOfWork.LikedReplyRepository.GetUserIdFromLikedRepliesAsync(userId, likedReply.ReplyId);
                 }
                 catch
                 {
-                    newUserId = 0;
+                    likedReply.UserId = 0;
                 }
 
-                if (newUserId != 0)
+                if (likedReply.UserId != 0)
                 {
                     logger.LogInformation($"User with id:{userId} has already liked it.");
 
                     return BadRequest($"User with id:{userId} has already liked it.");
                 }
 
-                await unitOfWork.ReplyRepository.PostNewLikeForReplyAsync(commentId, userId);
+                await unitOfWork.LikedReplyRepository.AddAsync(likedReply);
 
                 unitOfWork.Commit();
 
@@ -216,10 +221,10 @@ namespace Forum_API.Controllers
                 }
 
                 // Отримання значення ReplyId з таблиці PostsReplies, для того щоб перевірити коментар та пост на зв'язаність
-                commentId = await unitOfWork.ReplyRepository.GetReplyIdAsync(post.Id, reply.Id);
+                commentId = await unitOfWork.PostReplyRepository.GetReplyIdAsync(post.Id, reply.Id);
 
                 // Видалення запису з таблиці LikedReplies, щоб забрати лайк
-                await unitOfWork.ReplyRepository.DeleteLikeFromReplyAsync(commentId, userId);
+                await unitOfWork.LikedReplyRepository.DeleteLikeFromReplyAsync(commentId, userId);
 
                 unitOfWork.Commit();
 
