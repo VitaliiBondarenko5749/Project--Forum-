@@ -25,6 +25,11 @@ builder.Services.AddScoped<IPostRepository, PostRepository>();
 builder.Services.AddScoped<IReplyRepository, ReplyRepository>();
 builder.Services.AddScoped<IReplyToReplyRepository, ReplyToReplyRepository>();
 builder.Services.AddScoped<IGameRepository, GameRepository>();
+builder.Services.AddScoped<IPostReplyRepository, PostReplyRepository>();
+builder.Services.AddScoped<IPostGameRepository, PostGameRepository>();
+builder.Services.AddScoped<ILikedReplyRepository, LikedReplyRepository>();
+builder.Services.AddScoped<IReplyToReply_ReplyRepository, ReplyToReply_ReplyRepository>();
+builder.Services.AddScoped<ILikedReplyToReplyRepository, LikedReplyToReplyRepository>();
 
 var app = builder.Build();
 

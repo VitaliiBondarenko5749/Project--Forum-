@@ -9,12 +9,19 @@ namespace Forum_DAL.Repositories
 
         public UnitOfWork(IPostRepository postRepository, IReplyRepository replyRepository,
             IReplyToReplyRepository replyToRepliesRepository, IGameRepository gameRepository,
-            IDbTransaction transaction)
+            IPostReplyRepository postReplyRepository, IPostGameRepository postGameRepository,
+            ILikedReplyRepository likedReplyRepository, IReplyToReply_ReplyRepository replyToReply_ReplyRepository,
+            ILikedReplyToReplyRepository likedReplyToReplyRepository, IDbTransaction transaction)
         {
             PostRepository = postRepository;
             ReplyRepository = replyRepository;
             ReplyToReplyRepository = replyToRepliesRepository;
             GameRepository = gameRepository;
+            PostReplyRepository = postReplyRepository;
+            PostGameRepository = postGameRepository;
+            LikedReplyRepository = likedReplyRepository;
+            ReplyToReply_ReplyRepository = replyToReply_ReplyRepository;
+            LikedReplyToReplyRepository = likedReplyToReplyRepository;
 
             this.transaction = transaction;
         }
@@ -23,6 +30,11 @@ namespace Forum_DAL.Repositories
         public IReplyRepository ReplyRepository { get; }
         public IReplyToReplyRepository ReplyToReplyRepository { get; }
         public IGameRepository GameRepository { get; }
+        public IPostReplyRepository PostReplyRepository { get; }
+        public IPostGameRepository PostGameRepository { get; }
+        public ILikedReplyRepository LikedReplyRepository { get; }
+        public IReplyToReply_ReplyRepository ReplyToReply_ReplyRepository { get; }
+        public ILikedReplyToReplyRepository LikedReplyToReplyRepository { get; }
 
         public void Commit()
         {

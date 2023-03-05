@@ -68,22 +68,24 @@ namespace Forum_API.Controllers
                 // Отримання коментарів, які зв'язані з постом
                 post.Replies = (List<Reply>)await unitOfWork.ReplyRepository.GetRepliesForPostAsync(post.Id);
 
-                foreach (Reply reply in post.Replies)
+                foreach (Reply reply in post.Replies.Distinct())
                 {
                     // Отримання кількоті лайків, які зв'язані з коментарем
-                    reply.NumberOfLikes = await unitOfWork.ReplyRepository.GetLikesForReplyAsync(reply.Id);
+                    reply.NumberOfLikes = await unitOfWork.LikedReplyRepository.GetLikesForReplyAsync(reply.Id);
 
                     // Отрмання всіх відповідей на коментар
                     reply.RepliesToReply = (List<ReplyToReply>)await
                         unitOfWork.ReplyToReplyRepository.GetRepliesToReplyAsync(reply.Id);
 
-                    foreach (ReplyToReply replyToReply in reply.RepliesToReply)
+                    foreach (ReplyToReply replyToReply in reply.RepliesToReply.Distinct())
                     {
                         // Отримання кількості лайків на всі відповіді на коментвр
-                        replyToReply.NumberOfLikes = await unitOfWork.ReplyToReplyRepository
+                        replyToReply.NumberOfLikes = await unitOfWork.LikedReplyToReplyRepository
                             .GetLikesForReplyToReplyAsync(replyToReply.Id);
                     }
                 }
+
+                
 
                 logger.LogInformation("Got Post from the database!");
 
@@ -118,14 +120,17 @@ namespace Forum_API.Controllers
                     return BadRequest("Incorrect object \"Post\" type!");
                 }
 
-                int createdId = await unitOfWork.PostRepository.AddAsync(post);
+                PostGame postGame = new PostGame()
+                {
+                    PostId = await unitOfWork.PostRepository.AddAsync(post)
+                };
 
                 foreach (Game game in post.Games)
                 {
                     try
                     {
-                        int gameId = await unitOfWork.GameRepository.GetGameByNameAsync(game.GmName);
-                        await unitOfWork.PostRepository.PutPostAndGameAsync(createdId, gameId);
+                        postGame.GameId = await unitOfWork.GameRepository.GetGameByNameAsync(game.GmName);
+                        await unitOfWork.PostGameRepository.AddAsync(postGame);
                     }
                     catch
                     {
@@ -177,23 +182,28 @@ namespace Forum_API.Controllers
 
                 post.Id = postId;
 
+                PostGame postGame = new PostGame()
+                {
+                    PostId = post.Id
+                };
+
                 // Отримання айдішок всіх ігор з таблиці PostsGames, PostId яких еквівалентний з параметром
-                ICollection<int>? gamesId = (List<int>)await unitOfWork.PostRepository.GetGamesIdAsync(post.Id);
+                ICollection<int>? gamesId = (List<int>)await unitOfWork.PostGameRepository.GetGamesIdAsync(post.Id);
 
                 // Видалення з таблиці PostsGames
-                await unitOfWork.PostRepository.DeleteGamesFromPostAsync(post.Id);
+                await unitOfWork.PostGameRepository.DeleteGamesFromPostAsync(post.Id);
 
                 foreach (Game game in post.Games)
                 {
                     try
                     {
                         // Пробуємо отримати Id заданої нами гри
-                        int gameId = await unitOfWork.GameRepository.GetGameByNameAsync(game.GmName);
+                        postGame.GameId = await unitOfWork.GameRepository.GetGameByNameAsync(game.GmName);
 
-                        if (!gamesId.Contains(gameId)) // Якщо значення айді гри немає в колекції 
+                        if (!gamesId.Contains(postGame.GameId)) // Якщо значення айді гри немає в колекції 
                         {
                             // Вставка нових значень в таблицю PostsGames
-                            await unitOfWork.PostRepository.PutPostAndGameAsync(post.Id, gameId);
+                            await unitOfWork.PostGameRepository.AddAsync(postGame);
                         }
                     }
                     catch
@@ -236,15 +246,15 @@ namespace Forum_API.Controllers
                 }
 
                 //Видаляємо всі записи з таблиці PostsGames PostId який еквівалентний параметру id у методі
-                await unitOfWork.PostRepository.DeleteGamesFromPostAsync(postId);
+                await unitOfWork.PostGameRepository.DeleteGamesFromPostAsync(postId);
 
                 #region PostsReplies
 
                 // Отримання Id-значень з таблиці PostsReplies, які зв'язані з постом, який ми хочемо видалити
-                ICollection<int>? repliesId = (List<int>)await unitOfWork.ReplyRepository.GetRepliesIdAsync(postId);
+                ICollection<int>? repliesId = (List<int>)await unitOfWork.PostReplyRepository.GetRepliesIdAsync(postId);
 
                 // Видалення значень з таблиці PostsReplies, PostId яких еквівалентний з Id постом, який ми хочемо видалити
-                await unitOfWork.ReplyRepository.DeleteAllRepliesFromPostsAsync(postId);
+                await unitOfWork.PostReplyRepository.DeleteAllRepliesFromPostsAsync(postId);
 
                 #endregion
 
@@ -253,21 +263,21 @@ namespace Forum_API.Controllers
                 foreach (int replyId in repliesId)
                 {
                     // Видалення записів(лайків) з таблиці LikedReplies, ReplyId який еквівалентно зі значеннями колекції repliesId
-                    await unitOfWork.ReplyRepository.DeleteAllLikesFromReplyAsync(replyId);
+                    await unitOfWork.LikedReplyRepository.DeleteAllLikesFromReplyAsync(replyId);
 
                     // Отриманння RepliesToReplyId з таблиці RepliesToReply_Reply, які зв'язані з основною відповіддю
-                    ICollection<int>? secRepliesToReplyId = (List<int>)await unitOfWork.ReplyRepository.GetRepliesToReplyIdAsync(replyId);
+                    ICollection<int>? secRepliesToReplyId = (List<int>)await unitOfWork.ReplyToReply_ReplyRepository.GetRepliesToReplyIdAsync(replyId);
 
                     repliesToReplyId.Union(secRepliesToReplyId); // Записуємо значення в основну колекцію з тимчасової
 
                     // Видалення записів з таблиці RepliesToReply_Reply, ReplyId яких пов'язані з параметром
-                    await unitOfWork.ReplyRepository.DeleteRepliesToReplyAsync(replyId);
+                    await unitOfWork.ReplyToReply_ReplyRepository.DeleteRepliesToReplyAsync(replyId);
                 }
 
                 foreach (int replyToReplyId in repliesToReplyId.Distinct())
                 {
                     // Видалення записів з таблиці LikedRepliesToReply, ReplyToReplyId який еквівалентно зі значеннями з колекції
-                    await unitOfWork.ReplyToReplyRepository.DeleteLikedRepliesToReply(replyToReplyId);
+                    await unitOfWork.LikedReplyToReplyRepository.DeleteLikedRepliesToReply(replyToReplyId);
 
                     // Видаляємо відповіді на відповіді
                     await unitOfWork.ReplyToReplyRepository.DeleteAsync(replyToReplyId);
